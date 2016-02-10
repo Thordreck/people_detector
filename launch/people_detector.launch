@@ -1,0 +1,8 @@
+<launch>
+	<param name="use_sim_time" value= "true" />
+	<arg name="path" default="/home/viki/bagfiles/" />
+	<arg name="bagfile_1" default="UPO_pioneer_images_2014-04-30-12-43-38-fixed" />
+	<arg name="bagfile_2" default="UPO_pioneer_sensors_2014-04-30-12-43-38-fixed" />
+	<node name="player" pkg="rosbag" type="play" args="--clock $(arg path)$(arg bagfile_1).bag $(arg path)$(arg bagfile_2).bag" />	
+	<node name="detector" pkg="people_detector" type="people_detector_node" output="screen" args="/bumblenode/right/image_raw /bumblenode/right/camera_info /scanfront" />
+</launch>
