@@ -54,7 +54,7 @@ class PeopleDetector
 		void			mergeLaserAndImageData( std::vector<cv::Rect>& image_ROI, cv::Mat image, ros::Time time);
 		tf::Point		globalCoordinatesToLocal(tf::Point global_pt, ros::Time time);
 		void			publishPeople();
-		//void			getLaserDetectionROI(std::vector<tf::Point>& laser_legs, std::vector<cv::Rect>& laser_ROI, cv::Mat image);
+		void			getLaserDetectionROI(std::vector<tf::Point>& laser_legs, std::vector<cv::Rect>& laser_ROI, cv::Mat image);
 		void			getImageDetectionROI(std::vector<cv::Rect>& image_ROI,cv::Mat image);
 		void			printPeople(cv::Mat image, ros::Time time);
 		

@@ -9,8 +9,8 @@
 //ROS
 #include <ros/ros.h>
 #include <sensor_msgs/LaserScan.h>
-#include <tf/transform_listener.h>
 #include <laser_geometry/laser_geometry.h>
+#include <tf/transform_listener.h>
 
 using namespace std;
 
@@ -43,11 +43,16 @@ void LaserDetector::scan_message(vector<tf::Point>& legs_points, const sensor_ms
   {
 	
 	sensor_msgs::PointCloud cloud;
-	projector_.projectLaser(*msg,cloud);
+	//projector_.projectLaser(*msg,cloud);
+
+	if(!listener_.waitForTransform(msg->header.frame_id,"/base_link",msg->header.stamp + ros::Duration().fromSec(msg->ranges.size()*msg->time_increment),ros::Duration(1.0)))
+		cout << "LASER_DETECTION: cannot transform to base_link" << endl;
+
+	projector_.transformLaserScanToPointCloud("/base_link", *msg, cloud, listener_);	
 
 	// This is a list of segments.
-    // For more information have a look at ../common/dynamictable.h/hxx
-    dyntab_segments *list_segments=NULL;
+   	 // For more information have a look at ../common/dynamictable.h/hxx
+    	dyntab_segments *list_segments=NULL;
     int num_readings = msg->ranges.size();
     double *angles = new double[num_readings]; // array of angles
     double *ranges = new double[num_readings]; // array of measurements
@@ -68,8 +73,8 @@ void LaserDetector::scan_message(vector<tf::Point>& legs_points, const sensor_ms
     for (int i=0; i < list_segments->num(); i++) 
     {
       Segment *s = list_segments->getElement(i);
-	if(s->num() >=0 )
-		readings_index += s->num()-1;
+	if(s->num() > 0 )
+	readings_index += s->num()-1;
       // discard segments with less than three points
       if ( s->num() < 3 ) 
         s->type = -1;

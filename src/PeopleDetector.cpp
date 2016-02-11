@@ -38,18 +38,14 @@ PeopleDetector::PeopleDetector(char *imageTopic, char* infoTopic, char* laserTop
 	ld_  = new LaserDetector("/home/viki/tfg_ws/src/people_detector/src/legs_detector/training_data/hypo1.dat");
 
 	//Transform listener
-	tf_listener_ = new tf::TransformListener(ros::Duration(20.0));
-
-	//Give listener time to initialize before using it
-	ros::Duration duration(5.0);
-	duration.sleep();
+	tf_listener_ = new tf::TransformListener();
 
 	//Static transformations between laser, camera and base frames are obtained only once at the beginning 
 	try
 	{
-		tf_listener_->waitForTransform("/base_link", "/bumblebee", ros::Time(0), ros::Duration(100));
+        	tf_listener_->waitForTransform("/base_link",  "/bumblebee", ros::Time(0), ros::Duration(5));
         	tf_listener_->lookupTransform("/base_link",  "/bumblebee", ros::Time(0), tf_camera_base_link_);
-		tf_listener_->waitForTransform("/base_link", "/laserfront", ros::Time(0), ros::Duration(100));
+        	tf_listener_->waitForTransform("/base_link",  "/laserfront", ros::Time(0), ros::Duration(5));
         	tf_listener_->lookupTransform("/base_link",  "/laserfront", ros::Time(0), tf_laser_base_link_);
         }
     	catch (tf::TransformException ex)
@@ -82,11 +78,11 @@ void PeopleDetector::callback(const ImageConstPtr& image_msg, const CameraInfoCo
 	timer t;
 
 	vector<tf::Point> laser_legs;
-	vector<cv::Rect> image_ROI;
+	vector<cv::Rect> image_ROI, laser_ROI;
 
-	vector<Person> people_aux = people_;
+//	vector<Person> people_aux = people_;
 
-	people_.clear();
+//	people_.clear();
 
 	//Extract image from ros message and convert it to openCV Mat format
 	cv::Mat image = cv_bridge::toCvCopy(image_msg, image_msg->encoding)->image;
@@ -97,17 +93,21 @@ void PeopleDetector::callback(const ImageConstPtr& image_msg, const CameraInfoCo
 	//People's legs detection using laser data
 	ld_->scan_message(laser_legs,laser_msg);
 
+	getLaserDetectionROI(laser_legs,laser_ROI, image);
+	for(int i=0; i<laser_ROI.size(); i++)
+		cv::rectangle(image,laser_ROI[i], cv::Scalar(0,255,0));	
+
 	//Update people data
-	updatePeople(people_aux, laser_legs, time);
+	//updatePeople(people_aux, laser_legs, time);
 
 	//Scan the whole downscaled image
-	getImageDetectionROI(image_ROI, image);
+	//getImageDetectionROI(image_ROI, image);
 
 	//Merge laser and image data
-	mergeLaserAndImageData(image_ROI, image, time);
+	//mergeLaserAndImageData(image_ROI, image, time);
 
 	//People reamining in people_aux vector have not been associated. We predict their position and delete them if necessary
-	discardInactives();	
+	//discardInactives();	
 
 	//Publish detected people
 	//publishPeople();
@@ -184,7 +184,7 @@ void PeopleDetector::updatePeople(vector<Person>& people_aux, vector<tf::Point>&
 cv::Point2d PeopleDetector::point3dTo2d(tf::Point point3d)
 {
 	//Correct transform to follow camera coordinates system standard
-	cv::Point3d pt_cv  (-1*(point3d.y()+0.06), -1*point3d.z(), point3d.x());	
+	cv::Point3d pt_cv  (-1*(point3d.y() + 0.06), -1*point3d.z(), point3d.x());	
 	cv::Point2d point_2d_rect = cam_model_.project3dToPixel(pt_cv);
 
 	//Points are unrectified since we are using raw images
@@ -390,17 +390,15 @@ void PeopleDetector::publishPeople()
 	peoplePub_.publish(marker_array);
 	return;
 }
-/*
+
 void PeopleDetector::getLaserDetectionROI(vector<tf::Point>& laser_legs, vector<cv::Rect>& laser_ROI, cv::Mat image)
 {
 	vector<cv::Rect> ROI_rect;
-	vector<tf::Point> legs_rect,legs_rect_filtered;
+	vector<tf::Point> legs_rect;
 
 	for(int i=0; i<laser_legs.size(); i++)
 	{
 		//We have to convert the coordinates to the camera reference system and add ROI rectangle (0.5x1.80 m)
-		//TO-DO: USE TRANSFORM INSTEAD OF HARDCODED VALUES
-
 		tf::Point bottom_pt = tf_camera_base_link_.inverse() * (tf_laser_base_link_ *laser_legs[i]);
 
 		cv::Point2d uv_botright = point3dTo2d(bottom_pt + tf::Point(0, 0.25, 0));
@@ -408,50 +406,19 @@ void PeopleDetector::getLaserDetectionROI(vector<tf::Point>& laser_legs, vector<
 
 		cv::Rect ROI(uv_topleft,uv_botright);
 
-		//cv::Point2d uv_botmid = point3dTo2d(tf_camera_base_link_.inverse() * (tf_laser_base_link_ * laser_legs[i]));
-		//cv::circle(image, uv_botmid, 5, cv::Scalar(0,0,255),-1);
-		//cv::rectangle(image,ROI, cv::Scalar(255,0,0));	
-
 		//Check whether the ROI is fully contained in the image
 		cv::Rect rectsIntersection = ROI & cv::Rect(cv::Point(0,0),image.size());
 		if((ROI & rectsIntersection) == ROI)
 		{
-	   		ROI_rect.push_back(ROI);
+	   		laser_ROI.push_back(ROI);
 			legs_rect.push_back(laser_legs[i]);
 		}
 	}
 
-	//Filter the rectangles to remove heavily occlused ones (>=70% total rectangle area). Keep only the biggest ones
-	int i,j;
-
-	for(i=0; i<ROI_rect.size(); i++)
-	{
-		cv::Rect r = ROI_rect[i];
-		for(j=0; j<ROI_rect.size(); j++)
-			if(j!=i && (r & ROI_rect[j]).area() >= 0.7*r.area() && r.area() < ROI_rect[j].area())
-				break;
-		if(j==ROI_rect.size())
-		{
-			laser_ROI.push_back(r);
-			legs_rect_filtered.push_back(legs_rect[i]);	
-		}
-	}
-
-	laser_legs = legs_rect_filtered;
-
-	//TO-DO: IMPLEMENT SOMETHING A LA GROUPRECTANGLES FUNCTION. 
-	//CANNOT USE AS IT IS BECAUSE 3D LEG POINT INFO WOULD BE LOST ON RECTANGLES MERGE
-
-	//Group similar rectangles. Initial vector is duplicated in order to stand alone rectangles to reach
-	//grouprectangle function threshold ( =1 )
-	int size = laser_ROI.size();
-	for(int i=0; i< size;i++)
-		legs_rect_filtered.push_back(cv::Rect(legs_rect_filtered[i]));
-	cv::groupRectangles(legs_rect_filtered,1,0.2);	
-
+	laser_legs = legs_rect;
 	return;	
 }
-*/
+
 void PeopleDetector::getImageDetectionROI(vector<cv::Rect>& image_ROI, cv::Mat image)
 {
 	//Downscale image

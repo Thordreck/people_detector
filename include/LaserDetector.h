@@ -3,8 +3,8 @@
 
 #include <ros/ros.h>
 #include <sensor_msgs/LaserScan.h>
-#include <tf/transform_listener.h>
 #include <laser_geometry/laser_geometry.h>
+#include <tf/transform_listener.h>
 
 #include "LegsDetector.h"
 
