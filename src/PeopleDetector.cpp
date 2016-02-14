@@ -40,6 +40,10 @@ PeopleDetector::PeopleDetector(char *imageTopic, char* infoTopic, char* laserTop
 	//Transform listener
 	tf_listener_ = new tf::TransformListener();
 
+	//Give time to listener to initialize before using it
+	ros::Duration duration(5.0);
+	duration.sleep();
+
 	//Static transformations between laser, camera and base frames are obtained only once at the beginning 
 	try
 	{
@@ -399,7 +403,8 @@ void PeopleDetector::getLaserDetectionROI(vector<tf::Point>& laser_legs, vector<
 	for(int i=0; i<laser_legs.size(); i++)
 	{
 		//We have to convert the coordinates to the camera reference system and add ROI rectangle (0.5x1.80 m)
-		tf::Point bottom_pt = tf_camera_base_link_.inverse() * (tf_laser_base_link_ *laser_legs[i]);
+		//tf::Point bottom_pt = tf_camera_base_link_.inverse() * (tf_laser_base_link_ *laser_legs[i]);
+		tf::Point bottom_pt = tf_camera_base_link_.inverse() * laser_legs[i];
 
 		cv::Point2d uv_botright = point3dTo2d(bottom_pt + tf::Point(0, 0.25, 0));
 		cv::Point2d uv_topleft = point3dTo2d(bottom_pt + tf::Point(0,-0.25,1.80));

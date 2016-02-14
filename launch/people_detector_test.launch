@@ -1,0 +1,4 @@
+<launch>
+<include file="$(find people_detector)/launch/people_detector_bag.launch" />
+<include file="$(find people_detector)/launch/people_detector_node.launch" />
+</launch>

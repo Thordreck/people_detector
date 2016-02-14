@@ -1,0 +1,3 @@
+<launch>
+	<node name="detector" pkg="people_detector" type="people_detector_node" output="screen" args="/bumblenode/right/image_raw /bumblenode/right/camera_info /scanfront" />
+</launch>

@@ -10,28 +10,24 @@
 #include <ros/ros.h>
 #include <sensor_msgs/LaserScan.h>
 #include <laser_geometry/laser_geometry.h>
-#include <tf/transform_listener.h>
 
 using namespace std;
 
 
-LaserDetector::LaserDetector(string hypotheses_filename, int num_hypotheses /*= 100*/, double threshold_ /*= 0.15*/, int list_size_ /*= 500*/) 
- : max_range_(5)
+LaserDetector::LaserDetector(string hypotheses_filename, int num_hypotheses /*= 100*/, double threshold /*= 0.15*/, int list_size /*= 500*/) 
+ : MAX_LASER_DIST_(5), MAX_LEGS_DIST_(0.65), threshold_(threshold), list_size_(list_size)
 {
-	threshold = threshold_;
-	list_size = list_size_;
-
 	//Open hypotheses file
-	f_hypotheses = fopen(hypotheses_filename.c_str(),"r");
-	if (f_hypotheses == NULL)
+	f_hypotheses_ = fopen(hypotheses_filename.c_str(),"r");
+	if (f_hypotheses_ == NULL)
 		ROS_ERROR("ERROR opening hypothesis file %s", hypotheses_filename.c_str());
-	ld.load(f_hypotheses, num_hypotheses);
+	ld_.load(f_hypotheses_, num_hypotheses);
 	return;
 }
 
 LaserDetector::~LaserDetector()
 {
-    	fclose( f_hypotheses );
+    	fclose( f_hypotheses_ );
 	return;
 }
   
@@ -40,65 +36,89 @@ LaserDetector::~LaserDetector()
    * \param msg input laser scan
    */
 void LaserDetector::scan_message(vector<tf::Point>& legs_points, const sensor_msgs::LaserScan::ConstPtr &msg)
-  {
-	
+{
 	sensor_msgs::PointCloud cloud;
-	//projector_.projectLaser(*msg,cloud);
-
-	if(!listener_.waitForTransform(msg->header.frame_id,"/base_link",msg->header.stamp + ros::Duration().fromSec(msg->ranges.size()*msg->time_increment),ros::Duration(1.0)))
-		cout << "LASER_DETECTION: cannot transform to base_link" << endl;
-
-	projector_.transformLaserScanToPointCloud("/base_link", *msg, cloud, listener_);	
+	projector_.projectLaser(*msg,cloud);
 
 	// This is a list of segments.
-   	 // For more information have a look at ../common/dynamictable.h/hxx
+   	// For more information have a look at ../common/dynamictable.h/hxx
     	dyntab_segments *list_segments=NULL;
-    int num_readings = msg->ranges.size();
-    double *angles = new double[num_readings]; // array of angles
-    double *ranges = new double[num_readings]; // array of measurements
+    	int num_readings = msg->ranges.size();
+
+    	double *angles = new double[num_readings]; // array of angles
+    	double *ranges = new double[num_readings]; // array of measurements
     
-     for (unsigned int i = 0; i < num_readings; i++)
-    {
-      ranges[i] = msg->ranges[i];
-      angles[i] = msg->angle_min + i * msg->angle_increment;
-    }
-    list_segments = new dyntab_segments (list_size);
-    // segment the scan
-    ld.segmentScan(threshold, num_readings, angles, ranges, list_segments);
+     	for (unsigned int i = 0; i < num_readings; i++)
+    	{
+      		ranges[i] = msg->ranges[i];
+      		angles[i] = msg->angle_min + i * msg->angle_increment;
+    	}
+
+    	list_segments = new dyntab_segments (list_size_);
+    	// segment the scan
+    	ld_.segmentScan(threshold_, num_readings, angles, ranges, list_segments);
 		
+    	// Classiy segments
+    	for (int i=0; i < list_segments->num(); i++) 
+    	{
+      		Segment *s = list_segments->getElement(i);
 
-    int readings_index = 0;
+      		// discard segments with less than three points
+      		if ( s->num() < 3 ) 
+        		s->type = -1;
+      		else 
+        		ld_.classify(s); 
+	}
 
-    // Classiy segments
-    for (int i=0; i < list_segments->num(); i++) 
-    {
-      Segment *s = list_segments->getElement(i);
-	if(s->num() > 0 )
-	readings_index += s->num()-1;
-      // discard segments with less than three points
-      if ( s->num() < 3 ) 
-        s->type = -1;
-      else 
-        ld.classify(s); 
-      
-      if (s->type == 1 /*&& ranges[readings_index] <= max_range_*/)
-      {
-	legs_points.push_back(tf::Point(cloud.points[readings_index-(int)(s->num()/2)].x,cloud.points[readings_index-(int)(s->num()/2)].y,0));
-      }
+	//Associate legs
+    	int left_leg_index = 0;
+	int right_leg_index = 0;
+
+    	for (int i=0; i < list_segments->num(); i++) 
+    	{
+		Segment *s = list_segments->getElement(i);
+		left_leg_index += s->num() -1;
+
+      		if (s->type == 1 && ranges[left_leg_index] <= MAX_LASER_DIST_)
+		{
+			Segment *next_s;
+			right_leg_index = left_leg_index +1; 
+
+			int j;
+			for(j=i+1; j < list_segments->num(); j++)
+			{
+				next_s = list_segments->getElement(j);
+				if (next_s->type == 1)
+					break;
+				right_leg_index += next_s->num();
+			}
+
+			tf::Point left_leg(cloud.points[left_leg_index].x, cloud.points[left_leg_index].y, 0);
+			tf::Point right_leg(cloud.points[right_leg_index].x, cloud.points[right_leg_index].y, 0);
+
+			if(left_leg.distance(right_leg) <= MAX_LEGS_DIST_)
+			{
+				left_leg += right_leg;
+				left_leg /= 2;
+				legs_points.push_back(left_leg);	
+				i = j;
+				left_leg_index = right_leg_index + next_s->num() -1;
+			}
+			else
+				legs_points.push_back(tf::Point(cloud.points[left_leg_index].x, cloud.points[left_leg_index].y, 0));
+		}
+	}
+
+    	// delete the list of segments 
+    	list_segments->setAutoDelete(true);
+    	delete list_segments;
+    	list_segments = NULL;
+
+    	// free memory
+    	delete [] ranges;
+    	delete [] angles;
+
+    	return;
 }
-
-    // delete the list of segments 
-    list_segments->setAutoDelete(true);
-    delete list_segments;
-    list_segments = NULL;
-
-    // free memory
-    delete [] ranges;
-    delete [] angles;
-
-	//------------------------------------
-
-    return;
-  }
-  //end LaserDetector
+//end LaserDetector
 
