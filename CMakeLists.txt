@@ -18,8 +18,8 @@ find_package(catkin REQUIRED COMPONENTS
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
- find_package( OpenCV REQUIRED) 
- find_package( PkgConfig REQUIRED) 
+find_package( OpenCV REQUIRED) 
+find_package( PkgConfig REQUIRED) 
 pkg_check_modules(gsl REQUIRED gsl)
 pkg_check_modules(EIGEN REQUIRED eigen3)
 
@@ -107,11 +107,11 @@ include_directories(
   ${OpenCV_INCLUDE_DIRS}
   ${gsl_INCLUDE_DIRS}
   ${EIGEN_INCLUDE_DIRS}
-  /home/viki/tfg_ws/src/people_detector/include/
-  /home/viki/tfg_ws/src/people_detector/src/legs_detector/LegsDetector
-  /home/viki/tfg_ws/src/people_detector/src/legs_detector/features
-  /home/viki/tfg_ws/src/people_detector/src/legs_detector/common
-  /home/viki/tfg_ws/src/people_detector/src/legs_detector/linalg
+  include/
+  src/legs_detector/LegsDetector/
+  src/legs_detector/features/
+  src/legs_detector/common/
+  src/legs_detector/linalg/
 )
 
 ## Declare a cpp library
@@ -137,7 +137,7 @@ add_executable(people_detector_node 	src/PeopleDetector.cpp
 add_executable(correct_data	src/CorrectDataNode.cpp src/CorrectData.cpp)
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
- add_dependencies(people_detector_node $catkin_EXPORTED_TARGETS)
+add_dependencies(people_detector_node $catkin_EXPORTED_TARGETS)
 
 ## Specify libraries to link a library or executable target against
  target_link_libraries(people_detector_node
