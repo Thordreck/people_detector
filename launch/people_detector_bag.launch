@@ -3,5 +3,5 @@
 	<arg name="path" default="$(optenv HOME)/bagfiles/" />
 	<arg name="bagfile_1" default="UPO_pioneer_images_2014-04-30-12-43-38-fixed" />
 	<arg name="bagfile_2" default="UPO_pioneer_sensors_2014-04-30-12-43-38-fixed" />
-	<node name="player" pkg="rosbag" type="play" output="screen" args="--clock $(arg path)$(arg bagfile_1).bag $(arg path)$(arg bagfile_2).bag" />	
+	<node name="player" pkg="rosbag" type="play" output="screen" args="-q --clock $(arg path)$(arg bagfile_1).bag $(arg path)$(arg bagfile_2).bag" />	
 </launch>

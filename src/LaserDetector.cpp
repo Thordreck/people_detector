@@ -73,15 +73,19 @@ void LaserDetector::scan_message(vector<tf::Point>& legs_points, const sensor_ms
 	//Associate legs
     	int left_leg_index = 0;
 	int right_leg_index = 0;
+	tf::Point left_leg, right_leg;
 
     	for (int i=0; i < list_segments->num(); i++) 
     	{
 		Segment *s = list_segments->getElement(i);
 		left_leg_index += s->num() -1;
 
+
       		if (s->type == 1 && ranges[left_leg_index] <= MAX_LASER_DIST_)
 		{
-			Segment *next_s;
+			left_leg.setValue(cloud.points[left_leg_index].x, cloud.points[left_leg_index].y, 0);
+
+			Segment *next_s = NULL;
 			right_leg_index = left_leg_index +1; 
 
 			int j;
@@ -89,23 +93,23 @@ void LaserDetector::scan_message(vector<tf::Point>& legs_points, const sensor_ms
 			{
 				next_s = list_segments->getElement(j);
 				if (next_s->type == 1)
+				{
+					right_leg.setValue(cloud.points[right_leg_index].x, cloud.points[right_leg_index].y, 0);
 					break;
+				}
 				right_leg_index += next_s->num();
 			}
 
-			tf::Point left_leg(cloud.points[left_leg_index].x, cloud.points[left_leg_index].y, 0);
-			tf::Point right_leg(cloud.points[right_leg_index].x, cloud.points[right_leg_index].y, 0);
-
-			if(left_leg.distance(right_leg) <= MAX_LEGS_DIST_)
+			if(next_s && next_s->type == 1 && left_leg.distance(right_leg) <= MAX_LEGS_DIST_)
 			{
 				left_leg += right_leg;
 				left_leg /= 2;
 				legs_points.push_back(left_leg);	
 				i = j;
-				left_leg_index = right_leg_index + next_s->num() -1;
+				left_leg_index = right_leg_index + next_s->num();
 			}
 			else
-				legs_points.push_back(tf::Point(cloud.points[left_leg_index].x, cloud.points[left_leg_index].y, 0));
+				legs_points.push_back(left_leg);
 		}
 	}
 
