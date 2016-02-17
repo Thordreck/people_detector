@@ -75,11 +75,11 @@ void LaserDetector::scan_message(vector<tf::Point>& legs_points, const sensor_ms
 	int right_leg_index = 0;
 	tf::Point left_leg, right_leg;
 
+
     	for (int i=0; i < list_segments->num(); i++) 
     	{
 		Segment *s = list_segments->getElement(i);
 		left_leg_index += s->num() -1;
-
 
       		if (s->type == 1 && ranges[left_leg_index] <= MAX_LASER_DIST_)
 		{
@@ -104,13 +104,19 @@ void LaserDetector::scan_message(vector<tf::Point>& legs_points, const sensor_ms
 			{
 				left_leg += right_leg;
 				left_leg /= 2;
-				legs_points.push_back(left_leg);	
 				i = j;
 				left_leg_index = right_leg_index + next_s->num();
+				legs_points.push_back(left_leg);	
 			}
 			else
+			{
 				legs_points.push_back(left_leg);
+				i = j-1;
+				left_leg_index = right_leg_index;
+			}
 		}
+		else
+			left_leg_index++;
 	}
 
     	// delete the list of segments 
