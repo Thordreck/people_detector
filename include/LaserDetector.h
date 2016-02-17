@@ -20,6 +20,8 @@ class LaserDetector
 		LaserDetector(std::string hypotheses_filename, int num_hypotheses = 100, double threshold = 0.15, int list_size = 500);
 		~LaserDetector();
 		void scan_message(std::vector<tf::Point>& legs_points,const sensor_msgs::LaserScan::ConstPtr &msg);
+	private:
+		bool combineSegments(Segment *s, Segment *next_s, sensor_msgs::PointCloud &cloud, tf::Point &legs_point);
 			
 };
 

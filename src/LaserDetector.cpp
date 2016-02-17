@@ -37,8 +37,9 @@ LaserDetector::~LaserDetector()
    */
 void LaserDetector::scan_message(vector<tf::Point>& legs_points, const sensor_msgs::LaserScan::ConstPtr &msg)
 {
+
 	sensor_msgs::PointCloud cloud;
-	projector_.projectLaser(*msg,cloud);
+  	projector_.projectLaser(*msg, cloud);
 
 	// This is a list of segments.
    	// For more information have a look at ../common/dynamictable.h/hxx
@@ -70,53 +71,27 @@ void LaserDetector::scan_message(vector<tf::Point>& legs_points, const sensor_ms
         		ld_.classify(s); 
 	}
 
-	//Associate legs
-    	int left_leg_index = 0;
-	int right_leg_index = 0;
-	tf::Point left_leg, right_leg;
-
-
+	tf::Point legs_point;
+	//Associate segments corresponding to the same person
     	for (int i=0; i < list_segments->num(); i++) 
     	{
 		Segment *s = list_segments->getElement(i);
-		left_leg_index += s->num() -1;
+		Segment *next_s = NULL;
 
-      		if (s->type == 1 && ranges[left_leg_index] <= MAX_LASER_DIST_)
+      		if (s->type == 1 && s->beams->getFirst()->range <= MAX_LASER_DIST_)
 		{
-			left_leg.setValue(cloud.points[left_leg_index].x, cloud.points[left_leg_index].y, 0);
-
-			Segment *next_s = NULL;
-			right_leg_index = left_leg_index +1; 
-
-			int j;
-			for(j=i+1; j < list_segments->num(); j++)
+			for(int j=i+1; j < list_segments->num(); j++)
 			{
 				next_s = list_segments->getElement(j);
 				if (next_s->type == 1)
-				{
-					right_leg.setValue(cloud.points[right_leg_index].x, cloud.points[right_leg_index].y, 0);
 					break;
-				}
-				right_leg_index += next_s->num();
 			}
-
-			if(next_s && next_s->type == 1 && left_leg.distance(right_leg) <= MAX_LEGS_DIST_)
-			{
-				left_leg += right_leg;
-				left_leg /= 2;
-				i = j;
-				left_leg_index = right_leg_index + next_s->num();
-				legs_points.push_back(left_leg);	
-			}
-			else
-			{
-				legs_points.push_back(left_leg);
-				i = j-1;
-				left_leg_index = right_leg_index;
-			}
+			bool combined = combineSegments(s, next_s, cloud,legs_point);
+			if(!next_s || next_s->type != 1)
+				break;
+			i = (combined) ? next_s->getElement(0)->segment_id : next_s->getElement(0)->segment_id -1;
 		}
-		else
-			left_leg_index++;
+		legs_points.push_back(legs_point);
 	}
 
     	// delete the list of segments 
@@ -130,5 +105,31 @@ void LaserDetector::scan_message(vector<tf::Point>& legs_points, const sensor_ms
 
     	return;
 }
+
+//Combines segments if they belong to the same person.
+//Saves the result on tf::Point. Returns true if segments were actually combined
+bool LaserDetector::combineSegments(Segment *s, Segment *next_s, sensor_msgs::PointCloud &cloud,tf::Point &legs_point)
+{
+	bool combined = false;
+
+	int left_leg_index = s->beams->getLast()->position;
+	tf::Point left_leg(cloud.points[left_leg_index].x, cloud.points[left_leg_index].y,cloud.points[left_leg_index].z);
+
+	if(next_s && next_s->type == 1)
+	{	
+		int right_leg_index = s->beams->getFirst()->position;
+		tf::Point right_leg(cloud.points[right_leg_index].x, cloud.points[right_leg_index].y,cloud.points[right_leg_index].z);
+
+		if(left_leg.distance(right_leg) <= MAX_LEGS_DIST_)
+		{
+			combined = true;
+			left_leg += right_leg;
+			left_leg /=2;
+		}
+	}
+	legs_point = left_leg;
+	return combined;
+}
 //end LaserDetector
+
 
