@@ -15,9 +15,6 @@ struct PersonKF
 	Eigen::MatrixXd x;
 	Eigen::MatrixXd P;
 	
-	// Person ID
-	int id;
-	
 	// Last time update
 	ros::Time tStamp;
 	
@@ -29,7 +26,6 @@ struct PersonKF
 	{
 		x.setZero(4, 1);
 		P.setIdentity(4, 4);
-		id = -1;
 		tStamp = ros::Time::now();
 		updated = false;
 	}
@@ -38,7 +34,6 @@ struct PersonKF
 	{
 		x = data.x;
 		P = data.P;
-		id = data.id;
 		tStamp = data.tStamp;
 		updated = data.updated;
 	}
@@ -47,18 +42,14 @@ struct PersonKF
 	{
 		x = data.x;
 		P = data.P;
-		id = data.id;
 		tStamp = data.tStamp;
 		updated = data.updated;
 		return *this;
 	}
 	
 	// Filter initialization, position in m and velocity on m/s 
-	void init(int _id, double _x, double _y, double _vx, double _vy)
+	void init(double _x, double _y, double _vx, double _vy, ros::Time _tStamp)
 	{
-		// Get person ID
-		id = _id;
-		
 		// Setup state vector
 		x.setZero(4, 1);
 		x(0,0) = _x;
@@ -74,7 +65,7 @@ struct PersonKF
 		P(3,3) = 1.0*1.0;
 		
 		// Update time stamp
-		tStamp = ros::Time::now();
+		tStamp = _tStamp;
 		updated = false;
 	}
 	

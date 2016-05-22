@@ -21,13 +21,13 @@ using namespace sensor_msgs;
 using namespace visualization_msgs;
 
 
-PeopleDetector::PeopleDetector(char *imageTopic, char* infoTopic, char* laserTopic) : max_step_dist_(0.7), max_img_dist_(1.0),max_inactive_time_(2), sensitivity_(0.5), max_error_cov_(1.0)
+PeopleDetector::PeopleDetector() : MIN_INTERSECT_(0.3), max_step_dist_(0.7), max_img_dist_(1.0),max_inactive_time_(2), sensitivity_(0.5), max_error_cov_(1.0)
 {
 	
 	//Subscription and synchronization
-	imgSub_.subscribe(nh_,imageTopic,20);
-	cam_infoSub_.subscribe(nh_,infoTopic,20);
-	laserSub_.subscribe(nh_,laserTopic,50);
+	imgSub_.subscribe(nh_, "/bumblenode/right/image_raw", 20);
+	cam_infoSub_.subscribe(nh_, "/bumblenode/right/camera_info", 20);
+	laserSub_.subscribe(nh_, "/scanfront", 50);
 
 	sync_ = new Synchronizer<MySincPolicy>(MySincPolicy(10), imgSub_, cam_infoSub_, laserSub_);
 	sync_->registerCallback(boost::bind(&PeopleDetector::callback, this, _1, _2, _3));	
@@ -41,15 +41,15 @@ PeopleDetector::PeopleDetector(char *imageTopic, char* infoTopic, char* laserTop
 	tf_listener_ = new tf::TransformListener();
 
 	//Give time to listener to initialize before using it
-	ros::Duration duration(5.0);
+	ros::Duration duration(3.0);
 	duration.sleep();
 
 	//Static transformations between laser, camera and base frames are obtained only once at the beginning 
 	try
 	{
-        	tf_listener_->waitForTransform("/base_link",  "/bumblebee", ros::Time(0), ros::Duration(5));
+        	tf_listener_->waitForTransform("/base_link",  "/bumblebee", ros::Time(0), ros::Duration(5.0));
         	tf_listener_->lookupTransform("/base_link",  "/bumblebee", ros::Time(0), tf_camera_base_link_);
-        	tf_listener_->waitForTransform("/base_link",  "/laserfront", ros::Time(0), ros::Duration(5));
+        	tf_listener_->waitForTransform("/base_link",  "/laserfront", ros::Time(0), ros::Duration(5.0));
         	tf_listener_->lookupTransform("/base_link",  "/laserfront", ros::Time(0), tf_laser_base_link_);
         }
     	catch (tf::TransformException ex)
@@ -84,31 +84,27 @@ void PeopleDetector::callback(const ImageConstPtr& image_msg, const CameraInfoCo
 	vector<tf::Point> laser_legs;
 	vector<cv::Rect> image_ROI, laser_ROI;
 
-//	vector<Person> people_aux = people_;
-
-//	people_.clear();
-
 	//Extract image from ros message and convert it to openCV Mat format
 	cv::Mat image = cv_bridge::toCvCopy(image_msg, image_msg->encoding)->image;
 
 	//Get camera info for 3D projection onto images
 	cam_model_.fromCameraInfo(info_msg);
 
-	//People's legs detection using laser data
-	ld_->scan_message(laser_legs,laser_msg);
+	//Run both image and laser based person detector
+	getLaserDetection(laser_msg, laser_legs, laser_ROI, image);
+	getImageDetection(image_ROI, image);
 
-	getLaserDetectionROI(laser_legs,laser_ROI, image);
 	for(int i=0; i<laser_ROI.size(); i++)
-		cv::rectangle(image,laser_ROI[i], cv::Scalar(0,255,0));	
+		cv::rectangle(image,laser_ROI[i], cv::Scalar(0,0,255));	
 
-	//Update people data
-	//updatePeople(people_aux, laser_legs, time);
-
-	//Scan the whole downscaled image
-	//getImageDetectionROI(image_ROI, image);
+	for(int i=0; i<image_ROI.size(); i++)
+		cv::rectangle(image,image_ROI[i], cv::Scalar(255,0,0));	
 
 	//Merge laser and image data
 	//mergeLaserAndImageData(image_ROI, image, time);
+
+	//Update people data
+	//updatePeople(people_aux, laser_legs, time);
 
 	//People reamining in people_aux vector have not been associated. We predict their position and delete them if necessary
 	//discardInactives();	
@@ -123,7 +119,7 @@ void PeopleDetector::callback(const ImageConstPtr& image_msg, const CameraInfoCo
 	cout << "TIEMPO: " << t.elapsed() << endl;
 	cout << "------------------------------" << endl;
 }
-
+/*
 void PeopleDetector::updatePeople(vector<Person>& people_aux, vector<tf::Point>& laser_legs, ros::Time time)
 {
 	vector<int> index;
@@ -146,7 +142,7 @@ void PeopleDetector::updatePeople(vector<Person>& people_aux, vector<tf::Point>&
 			people_aux.erase(people_aux.begin() + index[i]);
 			laser_legs.erase(laser_legs.begin() + i);
 			index.erase(index.begin() + i--);
-		}	
+		}
 	}
 
 	//Check the first pair of legs that share the same person
@@ -184,6 +180,8 @@ void PeopleDetector::updatePeople(vector<Person>& people_aux, vector<tf::Point>&
 
 	return;
 }
+*/
+
 //Returns the projected 3D world point in the unrectified image
 cv::Point2d PeopleDetector::point3dTo2d(tf::Point point3d)
 {
@@ -194,45 +192,7 @@ cv::Point2d PeopleDetector::point3dTo2d(tf::Point point3d)
 	//Points are unrectified since we are using raw images
 	return cam_model_.unrectifyPoint(point_2d_rect);
 }
-
-//Returns the index to the closest point in a vector given a maximum distance using 3D coordinates
-int PeopleDetector::getClosestPoint(tf::Point point, vector<Person>& candidates,double max_dist)
-{
-	double dist, min_dist;
-	int min_index = -1;
-
-	for(int i=0; i<candidates.size(); i++)
-	{
-		dist = point.distance(candidates[i].getPos());
-		if(dist <= max_dist && (min_index == -1 || candidates[i].getErrorCov() < candidates[min_index].getErrorCov()))
-		{
-			min_index = i;
-			min_dist = dist;
-		}
-	}
-	return min_index;
-}
-
-
-//OVERLOADED getClosesPoint
-//Returns the index to the closest point in a vector given a maximum distance using 2d points on the image
-int PeopleDetector::getClosestPoint(cv::Point2d laser_pt, vector<cv::Point2d>& image_pts,double max_dist)
-{
-	double dist, min_dist;
-	int min_index = -1;
-
-	for(int i=0; i<image_pts.size(); i++)
-	{
-		dist = cv::norm(laser_pt - image_pts[i]);
-		if(dist <= max_dist && (min_index == -1 || dist < min_dist) )
-		{
-			min_index = i;
-			min_dist = dist;
-		}
-	}
-	return min_index;
-}
-
+/*
 void PeopleDetector::discardInactives()
 {
 	for(int i=0; i< people_.size(); i++)
@@ -245,7 +205,7 @@ void PeopleDetector::discardInactives()
 	}
 	return;
 }
-
+*/
 //Transform from robot relative coordinates to global coordinates using odometry info
 tf::Point PeopleDetector::localCoordinatesToGlobal(tf::Point local_point, ros::Time time)
 {
@@ -276,68 +236,70 @@ tf::Point PeopleDetector::globalCoordinatesToLocal(tf::Point global_pt, ros::Tim
 	return transform * global_pt;
 }
 
-void PeopleDetector::mergeLaserAndImageData( vector<cv::Rect>& image_ROI, cv::Mat image, ros::Time time)
+//Merge laser and image data. The merge is undergone when laser and image ROI detection intersects with a percentage high enough. As image detection ROI are usually bigger than
+//laser detection ROIs, they take precedence.
+void PeopleDetector::mergeLaserAndImageData(vector<mergedData>& v_merged_data, vector<cv::Rect>& image_ROI, vector<cv::Rect>& laser_ROI, vector<tf::Point>& laser_legs, ros::Time time)
 {
-	int i, j;
-	vector<cv::Point2d> cv_ppl_point, cv_image_point;
-	vector<int> index;
+	int laser_merge_index; //ROI laser index to merge with current image data
+	double merge_area;  //Area of the candidate to merge
 
-	//Project 3D points to image
-	for(i=0; i < people_.size(); i++)
+	for(int i=0; i < image_ROI.size(); i++)
 	{
-		tf::Point bottom_pt = tf_camera_base_link_.inverse() * (tf_laser_base_link_ * people_[i].getPos());
-		cv_ppl_point.push_back( point3dTo2d(bottom_pt) );
-	}
+		laser_merge_index = -1;
+		merge_area = 0.0;
+		cv::Rect r1 = image_ROI[i];
 
-	//Get image ROI bottom middle point
-	for(i=0; i < image_ROI.size(); i++)
-		cv_image_point.push_back(cv::Point2d(image_ROI[i].x + (int) image_ROI[i].width/2, image_ROI[i].y + image_ROI[i].height));	
-
-	//Calculate closest people position to merged data
-	for(i=0; i < cv_ppl_point.size(); i++)
-		index.push_back(getClosestPoint(cv_ppl_point[i], cv_image_point, max_img_dist_) );
-	
-	//Check first those person who share no other closest image detection
-	for(i=0; i < index.size() && index[i] != -1; i++)
-	{
-		for(j=0; j<index.size(); j++)
-			if(i!=j && index[i] == index[j])
-				break;
-		if(j == index.size())
+		for(int j=0; j < laser_ROI.size(); j++)
 		{
-			//UPDATE PERSON 
-			people_[i].addFiab();
-			cv_image_point.erase(cv_image_point.begin() + index[i]);
-			cv_ppl_point.erase(cv_ppl_point.begin() + i);
-			index.erase(index.begin() + i--);
-		}	
-	}
-	//Check the first pair of legs that share the same person
-	bool pair_found = false;
-	int closest_index;
-	for(i=0; i<index.size() && index[i] != -1 && !pair_found; i++)
-	{
-		for(j=i+1; j<index.size() && !pair_found; j++)
-		{
-			if(index[i] == index[j])
+			cv::Rect r2 = laser_ROI[j];
+			double area = (r1 & r2).area();
+			if( area > merge_area && area >= MIN_INTERSECT_ * min(r1.area(), r2.area()) )
 			{
-				closest_index = ( cv::norm(cv_ppl_point[i] - cv_image_point[index[i]]) < cv::norm(cv_ppl_point[j]- cv_image_point[index[i]])) ? i : j;
-				//UPDATE PERSON
-				people_[closest_index].addFiab();
-				cv_image_point.erase(cv_image_point.begin() + index[i]);
-				cv_ppl_point.erase(cv_ppl_point.begin() + closest_index);
-				pair_found = true;
+				laser_merge_index = j;
+				merge_area = area;
 			}
 		}
-			
-	}	
-	//If we found a pair, we have to recalculate again the distance of the remaining legs
-	if(pair_found)
-		mergeLaserAndImageData(image_ROI, image, time);
-	return;
+		mergedData merged_data;
+		merged_data.ROI = image_ROI[i];
+		merged_data.time = time;	
+
+		//If a candidate has been found, we merge both laser and image data
+		if(laser_merge_index != -1)
+		{
+			merged_data.pos = laser_legs[laser_merge_index];
+			merged_data.detection = e_laser_image;
+		}
+		//If not, only image data is used
+		else
+		{
+			merged_data.pos = ROIto3dPoint(image_ROI[i]);
+			merged_data.detection = e_image;
+		}
+		v_merged_data.push_back(merged_data);
+		//Remove laser and image detection used in the merge (if any)
+		if(laser_merge_index != -1)
+		{
+			laser_ROI.erase(laser_ROI.begin() + laser_merge_index);
+			laser_legs.erase(laser_legs.begin() + laser_merge_index);
+		}	
+		image_ROI.erase(image_ROI.begin() + i--);
+	}
+	
+	//Laser data not merged is added on its own
+	mergedData merged_data;
+	merged_data.time = time;
+	merged_data.detection = e_laser;
+
+	for(int i=0; i < laser_ROI.size(); i++)
+	{
+		merged_data.ROI = laser_ROI[i];
+		merged_data.pos = laser_legs[i];
+		v_merged_data.push_back(merged_data);
+	}
+	return;	
 }
 
-/*
+
 tf::Point PeopleDetector::ROIto3dPoint(cv::Rect ROI)
 {
 	//Projection will be done using the middle base point of the rectangle
@@ -353,7 +315,8 @@ tf::Point PeopleDetector::ROIto3dPoint(cv::Rect ROI)
 
 	return tf::Point(unit_vect.x()*ground_distance, unit_vect.y()*ground_distance,0);
 }
-*/
+
+/*
 void PeopleDetector::publishPeople()
 {
 	MarkerArray marker_array;
@@ -394,37 +357,57 @@ void PeopleDetector::publishPeople()
 	peoplePub_.publish(marker_array);
 	return;
 }
-
-void PeopleDetector::getLaserDetectionROI(vector<tf::Point>& laser_legs, vector<cv::Rect>& laser_ROI, cv::Mat image)
+*/
+//Run laser based detector and filter results (aka ROI inside each other)
+void PeopleDetector::getLaserDetection(const LaserScanConstPtr& laser_msg, vector<tf::Point>& laser_legs, vector<cv::Rect>& laser_ROI, cv::Mat image)
 {
-	vector<cv::Rect> ROI_rect;
-	vector<tf::Point> legs_rect;
+	vector<tf::Point> laser_legs_unfiltered, laser_legs_filtered;
+	vector<cv::Rect> laser_ROI_unfiltered;
 
-	for(int i=0; i<laser_legs.size(); i++)
+	//People's legs detection using laser data
+	ld_->scan_message(laser_legs_unfiltered, laser_msg);
+
+	for(int i=0; i< laser_legs_unfiltered.size(); i++)
 	{
 		//We have to convert the coordinates to the camera reference system and add ROI rectangle (0.5x1.80 m)
-		//tf::Point bottom_pt = tf_camera_base_link_.inverse() * (tf_laser_base_link_ *laser_legs[i]);
-		tf::Point bottom_pt = tf_camera_base_link_.inverse() * laser_legs[i];
+		tf::Point bottom_pt = tf_camera_base_link_.inverse() * laser_legs_unfiltered[i];
 
 		cv::Point2d uv_botright = point3dTo2d(bottom_pt + tf::Point(0, 0.25, 0));
 		cv::Point2d uv_topleft = point3dTo2d(bottom_pt + tf::Point(0,-0.25,1.80));
 
-		cv::Rect ROI(uv_topleft,uv_botright);
+		cv::Rect ROI(uv_topleft, uv_botright);
 
-		//Check whether the ROI is fully contained in the image
+		//First, check if whether the ROI is fully contained in the image as a prefilter
 		cv::Rect rectsIntersection = ROI & cv::Rect(cv::Point(0,0),image.size());
-		if((ROI & rectsIntersection) == ROI)
+		if( (ROI & rectsIntersection) == ROI )
 		{
-	   		laser_ROI.push_back(ROI);
-			legs_rect.push_back(laser_legs[i]);
+			//laser_ROI_unfiltered.push_back(ROI);
+			//laser_legs_filtered.push_back(laser_legs_unfiltered[i]);
+			laser_ROI.push_back(ROI);
+			laser_legs.push_back(laser_legs_unfiltered[i]);
 		}
 	}
+	/*
+		//Remove ROIs that are fully contained inside bigger ROIs
+		int i,j;
+		for(i=0; i< laser_ROI_unfiltered.size(); i++)
+		{
+			cv::Rect r = laser_ROI_unfiltered[i];
 
-	laser_legs = legs_rect;
-	return;	
+			for(j = 0; j< laser_ROI_unfiltered.size(); j++)
+				if(j!=i && (r & laser_ROI_unfiltered[j]) == r)
+					break;
+
+			if(j == laser_ROI_unfiltered.size())
+			{
+				laser_ROI.push_back(laser_ROI_unfiltered[i]);
+				laser_legs.push_back(laser_legs_filtered[i]);
+			}
+		}
+	*/return;	
 }
 
-void PeopleDetector::getImageDetectionROI(vector<cv::Rect>& image_ROI, cv::Mat image)
+void PeopleDetector::getImageDetection(vector<cv::Rect>& image_ROI, cv::Mat image)
 {
 	//Downscale image
 	cv::Mat image_downscaled;
@@ -449,13 +432,13 @@ void PeopleDetector::getImageDetectionROI(vector<cv::Rect>& image_ROI, cv::Mat i
 		//Convert from camera coordinate system to tf system
 		tf::Point unit_vect(unit_vect_cam.z, -1*unit_vect_cam.x, -1*unit_vect_cam.y);
 
-		//Save only rectangles whose 3d ray projection goes through the floor (rectangles on upper positions cannot belong to real people)
+		//Save only rectangles whose 3d ray projection goes through the floor (rectangles on upper positions cannot belong to real full people)
 		if(unit_vect.z() < 0)
 			image_ROI.push_back(ROI_unfiltered[i]);
 	}
 	return;
 }
-
+/*
 void PeopleDetector::printPeople(cv::Mat image, ros::Time time)
 {
 	for(int i=0; i<people_.size(); i++)
@@ -475,4 +458,4 @@ void PeopleDetector::printPeople(cv::Mat image, ros::Time time)
 	}
 	return;
 }
-
+*/

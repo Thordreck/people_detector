@@ -6,37 +6,27 @@
 #include "ros/ros.h"
 #include "iostream"
 
+#include "person_kf.h"
+
 class Person
 {
 		static int			next_id;
 		int				id_;			//Unique person id
+		ros::Time			last_update_time;	//Time of the last prediction
 
-		ros::Time			last_correct_time_,last_predict_time_;	//Time of the last prediction
+		PersonKF			*kf_;
 
-		tf::Point			position_;		//Person position in /base_link frame
-		tf::Vector3			velocity_;
 
-		cv::KalmanFilter		*kf_;			//Kalman filter used to predict position and velocity
-		cv::Mat				meas;
-		
-		int				fiability_;
-
-		void				updateTime(ros::Time time, ros::Time last_time); 
-		void				setData(const cv::Mat& meas, ros::Time time);
 	public:
-						Person(tf::Point pos, ros::Time time);
-						Person(const Person &psource);
-		void 				predict(ros::Time time);
-		void				correct(tf::Point pos, ros::Time time);	
+				Person(tf::Point pos, ros::Time time);
+				~Person();
+		void		update(ros::Time);		
+		void		update(tf::Point pos, ros::Time time);
 		
-		friend				std::ostream &operator<<(std::ostream &output, const Person &P);	
-		tf::Point			getPos();
-		ros::Time			getTime();
-		int				getId();
-		float				getErrorCov();
-		int				getFiab();
-		void				addFiab();
-		void				subFiab();
+		tf::Point	getPos();
+		int		getId();
+		
+		friend		std::ostream &operator<<(std::ostream &output, const Person &P);	
 };
 
 #endif

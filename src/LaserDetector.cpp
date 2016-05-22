@@ -76,21 +76,22 @@ void LaserDetector::scan_message(vector<tf::Point>& legs_points, const sensor_ms
     	for (int i=0; i < list_segments->num(); i++) 
     	{
 		Segment *s = list_segments->getElement(i);
-		Segment *next_s = NULL;
 
       		if (s->type == 1 && s->beams->getFirst()->range <= MAX_LASER_DIST_)
 		{
+			Segment *next_s = NULL;
 			for(int j=i+1; j < list_segments->num(); j++)
 			{
 				next_s = list_segments->getElement(j);
 				if (next_s->type == 1)
 					break;
 			}
-			bool combined = combineSegments(s, next_s, cloud,legs_point);
+			bool combined = combineSegments(s, next_s, cloud, legs_point);
 			if(!next_s || next_s->type != 1)
 				break;
 			i = (combined) ? next_s->getElement(0)->segment_id : next_s->getElement(0)->segment_id -1;
 		}
+
 		legs_points.push_back(legs_point);
 	}
 
@@ -117,7 +118,7 @@ bool LaserDetector::combineSegments(Segment *s, Segment *next_s, sensor_msgs::Po
 
 	if(next_s && next_s->type == 1)
 	{	
-		int right_leg_index = s->beams->getFirst()->position;
+		int right_leg_index = next_s->beams->getFirst()->position;
 		tf::Point right_leg(cloud.points[right_leg_index].x, cloud.points[right_leg_index].y,cloud.points[right_leg_index].z);
 
 		if(left_leg.distance(right_leg) <= MAX_LEGS_DIST_)

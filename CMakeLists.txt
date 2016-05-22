@@ -133,8 +133,6 @@ add_executable(people_detector_node 	src/PeopleDetector.cpp
 					${src3}
 					${src4}
 				)
-
-add_executable(correct_data	src/CorrectDataNode.cpp src/CorrectData.cpp)
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
 add_dependencies(people_detector_node $catkin_EXPORTED_TARGETS)
@@ -145,10 +143,6 @@ add_dependencies(people_detector_node $catkin_EXPORTED_TARGETS)
    ${OpenCV_LIBRARIES}
    ${gsl_LIBRARIES}
    ${EIGEN_LIBRARIES}
- )
-
- target_link_libraries(correct_data
-   ${catkin_LIBRARIES}
  )
 
 add_definitions(${EIGEN_DEFINITIONS})
