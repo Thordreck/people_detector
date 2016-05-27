@@ -10,18 +10,19 @@
 #include <ros/ros.h>
 #include <sensor_msgs/LaserScan.h>
 #include <laser_geometry/laser_geometry.h>
+#include <tf/transform_listener.h>
 
 using namespace std;
 
 
-LaserDetector::LaserDetector(string hypotheses_filename, int num_hypotheses /*= 100*/, double threshold /*= 0.15*/, int list_size /*= 500*/) 
- : MAX_LASER_DIST_(5), MAX_LEGS_DIST_(0.65), threshold_(threshold), list_size_(list_size)
+LaserDetector::LaserDetector(int num_hypotheses, double threshold, int list_size) : MAX_LASER_DIST_(5), MAX_LEGS_DIST_(0.65), threshold_(threshold), list_size_(list_size)
 {
 	//Open hypotheses file
-	f_hypotheses_ = fopen(hypotheses_filename.c_str(),"r");
+	f_hypotheses_ = fopen("/home/viki/tfg_ws/src/people_detector/src/legs_detector/training_data/hypo1.dat", "r");
 	if (f_hypotheses_ == NULL)
-		ROS_ERROR("ERROR opening hypothesis file %s", hypotheses_filename.c_str());
+		ROS_ERROR("ERROR opening laser detector hypothesis file!");
 	ld_.load(f_hypotheses_, num_hypotheses);
+
 	return;
 }
 
@@ -38,10 +39,15 @@ LaserDetector::~LaserDetector()
 void LaserDetector::scan_message(vector<tf::Point>& legs_points, const sensor_msgs::LaserScan::ConstPtr &msg)
 {
 
-	sensor_msgs::PointCloud cloud;
-  	projector_.projectLaser(*msg, cloud);
+	tf::TransformListener tf_listener;
 
-	// This is a list of segments.
+	if(!tf_listener.waitForTransform( msg->header.frame_id, "/base_link", msg->header.stamp + ros::Duration().fromSec(msg->ranges.size()*msg->time_increment),ros::Duration(1.0))){
+     		return;
+  	}
+
+	sensor_msgs::PointCloud cloud;
+	projector_.transformLaserScanToPointCloud("/base_link", *msg, cloud, tf_listener);
+
    	// For more information have a look at ../common/dynamictable.h/hxx
     	dyntab_segments *list_segments=NULL;
     	int num_readings = msg->ranges.size();
@@ -114,12 +120,12 @@ bool LaserDetector::combineSegments(Segment *s, Segment *next_s, sensor_msgs::Po
 	bool combined = false;
 
 	int left_leg_index = s->beams->getLast()->position;
-	tf::Point left_leg(cloud.points[left_leg_index].x, cloud.points[left_leg_index].y,cloud.points[left_leg_index].z);
+	tf::Point left_leg(cloud.points[left_leg_index].x, cloud.points[left_leg_index].y, 0);
 
 	if(next_s && next_s->type == 1)
 	{	
 		int right_leg_index = next_s->beams->getFirst()->position;
-		tf::Point right_leg(cloud.points[right_leg_index].x, cloud.points[right_leg_index].y,cloud.points[right_leg_index].z);
+		tf::Point right_leg(cloud.points[right_leg_index].x, cloud.points[right_leg_index].y,0);
 
 		if(left_leg.distance(right_leg) <= MAX_LEGS_DIST_)
 		{

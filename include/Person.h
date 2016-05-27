@@ -1,7 +1,6 @@
 #ifndef PERSON_H
 #define PERSON_H
 
-#include "opencv2/opencv.hpp"
 #include "tf/tf.h"
 #include "ros/ros.h"
 #include "iostream"
@@ -12,6 +11,7 @@ class Person
 {
 		static int			next_id;
 		int				id_;			//Unique person id
+		int				life_time_;		//If zero person is deleted
 		ros::Time			last_update_time;	//Time of the last prediction
 
 		PersonKF			*kf_;
@@ -20,11 +20,14 @@ class Person
 	public:
 				Person(tf::Point pos, ros::Time time);
 				~Person();
-		void		update(ros::Time);		
-		void		update(tf::Point pos, ros::Time time);
+		void		update(ros::Time time);		
+		void		update(tf::Point pos, ros::Time time, bool img_detection);
+		void		update(int cx, int cy, tf::StampedTransform transform, ros::Time time);
 		
 		tf::Point	getPos();
+		ros::Time	getTime();
 		int		getId();
+		int		getLifeTime();
 		
 		friend		std::ostream &operator<<(std::ostream &output, const Person &P);	
 };

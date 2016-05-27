@@ -11,17 +11,20 @@ class LaserDetector
 {
 		const int			MAX_LASER_DIST_;
 		const double			MAX_LEGS_DIST_;
-		double				threshold_;
+
 		FILE				*f_hypotheses_;
+		double				threshold_;
 		int				list_size_;
+
 		LegsDetector			ld_;
 		laser_geometry::LaserProjection	projector_;		
+
+		bool combineSegments(Segment *s, Segment *next_s, sensor_msgs::PointCloud &cloud, tf::Point &legs_point);
+
 	public:
-		LaserDetector(std::string hypotheses_filename, int num_hypotheses = 100, double threshold = 0.15, int list_size = 500);
+		LaserDetector(int num_hypotheses = 100, double threshold = 0.15, int list_size = 500);
 		~LaserDetector();
 		void scan_message(std::vector<tf::Point>& legs_points,const sensor_msgs::LaserScan::ConstPtr &msg);
-	private:
-		bool combineSegments(Segment *s, Segment *next_s, sensor_msgs::PointCloud &cloud, tf::Point &legs_point);
 			
 };
 
