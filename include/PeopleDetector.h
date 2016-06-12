@@ -43,6 +43,11 @@ class PeopleDetector
 
 		tf::TransformListener						*tf_listener_;
 
+		tf::StampedTransform						tf_base_camera_;
+		tf::StampedTransform						tf_camera_base_;
+		tf::StampedTransform						tf_base_global_;
+		tf::StampedTransform						tf_global_base_;
+
 		message_filters::Subscriber<sensor_msgs::Image>			imgSub_;
 		message_filters::Subscriber<sensor_msgs::CameraInfo>		cam_infoSub_;
 		message_filters::Subscriber<sensor_msgs::LaserScan>		laserfrontSub_;
@@ -53,10 +58,15 @@ class PeopleDetector
 		std::vector<Person>						people_;
 
 		const double							MIN_INTERSECT_; //Minimun area percentage of intersection to merge laser and image ROIs (from 0 to 1)
+		const double							MAX_STEP_; //Minimun area percentage of intersection to merge laser and image ROIs (from 0 to 1)
 
-		void			getLaserDetection(const sensor_msgs::LaserScanConstPtr& laser_msg, std::vector<tf::Point>& laser_legs, std::vector<cv::Rect>& laser_ROI, cv::Mat image);
+		bool								cam_info_set_;
+		bool								static_tf_set_;
+		bool								global_tf_set_;
+
 		void			getImageDetection(std::vector<cv::Rect>& image_ROI, const cv::Mat image);
-		void			mergeData(std::vector<mergedData>& merged_data, std::vector<cv::Rect>& image_ROI, std::vector<cv::Rect>& laser_ROI, std::vector<tf::Point>& laser_legs);
+		void			getLaserDetection(std::vector<tf::Point>& legs_front, std::vector<tf::Point>& legs_back, std::vector<cv::Rect>& laser_ROI, ros::Time);
+		void			mergeData(std::vector<mergedData>& merged_data, std::vector<cv::Rect>& image_ROI, std::vector<cv::Rect>& laser_ROI,std::vector<tf::Point>& legs_front, std::vector<tf::Point>& legs_back);
 		void			updatePeople(std::vector<mergedData>& merged_data, ros::Time time);
 
 		cv::Point2d		point3dTo2d(tf::Point point3d);

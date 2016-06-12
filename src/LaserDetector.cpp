@@ -23,6 +23,8 @@ LaserDetector::LaserDetector(int num_hypotheses, double threshold, int list_size
 		ROS_ERROR("ERROR opening laser detector hypothesis file!");
 	ld_.load(f_hypotheses_, num_hypotheses);
 
+	tf_listener_ = new tf::TransformListener;;
+
 	return;
 }
 
@@ -39,14 +41,14 @@ LaserDetector::~LaserDetector()
 void LaserDetector::scan_message(vector<tf::Point>& legs_points, const sensor_msgs::LaserScan::ConstPtr &msg)
 {
 
-	tf::TransformListener tf_listener;
 
-	if(!tf_listener.waitForTransform( msg->header.frame_id, "/base_link", msg->header.stamp + ros::Duration().fromSec(msg->ranges.size()*msg->time_increment),ros::Duration(1.0))){
+	if(!tf_listener_->waitForTransform( "/base_link", msg->header.frame_id, msg->header.stamp ,ros::Duration(0.3))){
      		return;
   	}
 
 	sensor_msgs::PointCloud cloud;
-	projector_.transformLaserScanToPointCloud("/base_link", *msg, cloud, tf_listener);
+	projector_.transformLaserScanToPointCloud("/base_link", *msg, cloud, *tf_listener_);
+//	projector_.projectLaser(*msg, cloud);
 
    	// For more information have a look at ../common/dynamictable.h/hxx
     	dyntab_segments *list_segments=NULL;

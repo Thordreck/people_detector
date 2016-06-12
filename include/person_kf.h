@@ -6,26 +6,28 @@
 #include <ros/ros.h>
 //#include <Eigen/LU>
 
-#define PERSONKF_POS_VAR 0.1
+#define PERSONKF_LASER_POS_VAR 0.1
+#define PERSONKF_IMAGE_X_VAR 0.1
+#define PERSONKF_IMAGE_Y_VAR 0.1
 #define PERSONKF_VEL_NOISE_VAR 0.2  
 
+//Anonymous namespace is used to avoid multiple definition compiler errors when calling PersonKF static functions from other files
+namespace{
 struct PersonKF
 {
 	// State vector: [x (m), y (m), vx (m/s), vy (m/s)]
 	Eigen::MatrixXd x;
 	Eigen::MatrixXd P;
 	
+	//Camera projection matrix K
+	static Eigen::Matrix3d K_cam;
+
 	// Last time update
 	ros::Time tStamp;
 	
 	// Updated flag
 	bool updated;
 
-	//Camera info
-	static const double fx = 341.5356;
-	static const double fy = 343.9592;
-	static const double cx = 330.6673;
-	static const double cy = 244.41414;
 	
 	// Default constructor
 	PersonKF(void) : x(4,1), P(4,4) 
@@ -66,8 +68,8 @@ struct PersonKF
 		
 		// Setup cov matrix
 		P.setIdentity(4, 4);
-		P(0,0) = PERSONKF_POS_VAR;
-		P(1,1) = PERSONKF_POS_VAR;
+		P(0,0) = PERSONKF_LASER_POS_VAR;
+		P(1,1) = PERSONKF_LASER_POS_VAR;
 		P(2,2) = 1.0*1.0;
 		P(3,3) = 1.0*1.0;
 		
@@ -75,7 +77,9 @@ struct PersonKF
 		tStamp = _tStamp;
 		updated = false;
 	}
-	
+
+	static void set_caminfo(double _fx, double _fy, double _u, double _v);
+
 	// State prediction, time in seconds 
 	void predict(double _dt)
 	{
@@ -112,8 +116,8 @@ struct PersonKF
 		// Compute update noise matrix
 		Eigen::Matrix<double, 2, 2> R;
 		R.setZero(2, 2);
-		R(0,0) = PERSONKF_POS_VAR;
-		R(1,1) = PERSONKF_POS_VAR;
+		R(0,0) = PERSONKF_LASER_POS_VAR;
+		R(1,1) = PERSONKF_LASER_POS_VAR;
 		
 		// Calculate innovation matrix
 		Eigen::Matrix<double, 2, 2> S;
@@ -144,20 +148,23 @@ struct PersonKF
 	{
 		// Update time stamp
 		tStamp = _t;
-		
+
 		// Compute update jacobian
 		Eigen::Matrix<double, 2, 4> H;
 		H.setZero(2, 4);
-		H(0,0) = cx*_TF(0,0) - fx*_TF(1,0);
-		H(0,1) = cx*_TF(0,1) - fx*_TF(1,1);
-		H(1,0) = cy*_TF(0,0) - fy*_TF(2,0);
-		H(1,1) = cy*_TF(0,1) - fy*_TF(2,1);
-		
+		H(0,0) =  (_TF(0,0)*(K_cam(0,0)*_TF(1,3) - _TF(0,3)*K_cam(0,2) + x(0,0)*(K_cam(0,0)*_TF(1,0) - _TF(0,0)*K_cam(0,2)) + x(1,0)*(K_cam(0,0)*_TF(1,1) - _TF(0,1)*K_cam(0,2))))/((_TF(0,3) + _TF(0,0)*x(0,0) + _TF(0,1)*x(1,0))*(_TF(0,3) + _TF(0,0)*x(0,0) + _TF(0,1)*x(1,0))) - (K_cam(0,0)*_TF(1,0) - _TF(0,0)*K_cam(0,2))/(_TF(0,3) + _TF(0,0)*x(0,0) + _TF(0,1)*x(1,0)); 
+
+		H(0,1) =  (_TF(0,1)*(K_cam(0,0)*_TF(1,3) - _TF(0,3)*K_cam(0,2) + x(0,0)*(K_cam(0,0)*_TF(1,0) - _TF(0,0)*K_cam(0,2)) + x(1,0)*(K_cam(0,0)*_TF(1,1) - _TF(0,1)*K_cam(0,2))))/((_TF(0,3) + _TF(0,0)*x(0,0) + _TF(0,1)*x(1,0))*(_TF(0,3) + _TF(0,0)*x(0,0) + _TF(0,1)*x(1,0))) - (K_cam(0,0)*_TF(1,1) - _TF(0,1)*K_cam(0,2))/(_TF(0,3) + _TF(0,0)*x(0,0) + _TF(0,1)*x(1,0)); 
+
+		H(1,0) =  (_TF(0,0)*(K_cam(1,1)*_TF(2,3) - _TF(0,3)*K_cam(1,2) + x(0,0)*(K_cam(1,1)*_TF(2,0) - _TF(0,0)*K_cam(1,2)) + x(1,0)*(K_cam(1,1)*_TF(2,1) - _TF(0,1)*K_cam(1,2))))/((_TF(0,3) + _TF(0,0)*x(0,0) + _TF(0,1)*x(1,0))*(_TF(0,3) + _TF(0,0)*x(0,0) + _TF(0,1)*x(1,0))) - (K_cam(1,1)*_TF(2,0) - _TF(0,0)*K_cam(1,2))/(_TF(0,3) + _TF(0,0)*x(0,0) + _TF(0,1)*x(1,0)); 
+
+		H(1,1) =  (_TF(0,1)*(K_cam(1,1)*_TF(2,3) - _TF(0,3)*K_cam(1,2) + x(0,0)*(K_cam(1,1)*_TF(2,0) - _TF(0,0)*K_cam(1,2)) + x(1,0)*(K_cam(1,1)*_TF(2,1) - _TF(0,1)*K_cam(1,2))))/((_TF(0,3) + _TF(0,0)*x(0,0) + _TF(0,1)*x(1,0))*(_TF(0,3) + _TF(0,0)*x(0,0) + _TF(0,1)*x(1,0))) - (K_cam(1,1)*_TF(2,1) - _TF(0,1)*K_cam(1,2))/(_TF(0,3) + _TF(0,0)*x(0,0) + _TF(0,1)*x(1,0)); 
+
 		// Compute update noise matrix
 		Eigen::Matrix<double, 2, 2> R;
 		R.setZero(2, 2);
-		R(0,0) = PERSONKF_POS_VAR;
-		R(1,1) = PERSONKF_POS_VAR;
+		R(0,0) = PERSONKF_IMAGE_X_VAR;
+		R(1,1) = PERSONKF_IMAGE_Y_VAR;
 		
 		// Calculate innovation matrix
 		Eigen::Matrix<double, 2, 2> S;
@@ -172,7 +179,13 @@ struct PersonKF
 		Eigen::Matrix<double, 2, 1> c;
 		c(0,0) = _cx;
 		c(1,0) = _cy;
-		y = c - H*x; 
+
+		Eigen::Matrix<double, 2, 1> c_est;
+		c_est(0,0) = (-1*(K_cam(0,0)*_TF(1,3) - _TF(0,3)*K_cam(0,2) + x(0,0)*(K_cam(0,0)*_TF(1,0) - _TF(0,0)*K_cam(0,2)) + x(1,0)*(K_cam(0,0)*_TF(1,1) - _TF(0,1)*K_cam(0,2))))/(_TF(0,3) + _TF(0,0)*x(0,0) + _TF(0,1)*x(1,0)); 
+		c_est(1,0) = (-1*(K_cam(1,1)*_TF(2,3) - _TF(0,3)*K_cam(1,2) + x(0,0)*(K_cam(1,1)*_TF(2,0) - _TF(0,0)*K_cam(1,2)) + x(1,0)*(K_cam(1,1)*_TF(2,1) - _TF(0,1)*K_cam(1,2))))/(_TF(0,3) + _TF(0,0)*x(0,0) + _TF(0,1)*x(1,0)); 
+
+		//y = c - h*x; 
+		y = c - c_est; 
 		
 		// Calculate new state vector
 		x = x + K*y;
@@ -186,4 +199,18 @@ struct PersonKF
 	}
 };
 
+Eigen::Matrix3d PersonKF::K_cam;
+
+//Set camera projection matrix K
+void PersonKF::set_caminfo(double _fx, double _fy, double _u, double _v)
+{
+	K_cam.setZero(3, 3);
+	K_cam(0,0) = _fx;
+	K_cam(0,2) = _u;
+	K_cam(1,1) = _fy;
+	K_cam(1,2) = _v;
+	K_cam(2,2) = 1.0;
+	return;
+}
+}
 #endif

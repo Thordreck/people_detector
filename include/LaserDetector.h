@@ -4,6 +4,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/LaserScan.h>
 #include <laser_geometry/laser_geometry.h>
+#include <tf/transform_listener.h>
 
 #include "LegsDetector.h"
 
@@ -15,6 +16,8 @@ class LaserDetector
 		FILE				*f_hypotheses_;
 		double				threshold_;
 		int				list_size_;
+
+		tf::TransformListener		*tf_listener_;
 
 		LegsDetector			ld_;
 		laser_geometry::LaserProjection	projector_;		
