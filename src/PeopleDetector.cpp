@@ -12,6 +12,13 @@
 #include <tf/transform_listener.h>
 #include <iostream>
 
+//(Un)-Comment to get debug info
+#define DEBUG_PRINT_PROCESSING_TIME
+#define DEBUG_PRINT_IMAGE_DETECTION
+#define DEBUG_PRINT_LASER_DETECTION
+#define DEBUG_PRINT_COMBINED_DETECTION
+#define DEBUG_PRINT_DETECTED_PERSON
+#define DEBUG_PUBLISH_PERSON_MARKER
 
 using namespace ros;
 using namespace std;
@@ -42,8 +49,8 @@ PeopleDetector::PeopleDetector() : MIN_INTERSECT_(0.3), MAX_STEP_(0.6)
 	tf_listener_ = new tf::TransformListener();
 	
 	//People publisher
-	peoplePub_ = nh_.advertise<MarkerArray>("people_marker", 1);
-
+	peoplePub_ = nh_.advertise<MarkerArray>("/people_marker", 1);
+	
 	//Flags
 	cam_info_set_ = false;
 	static_tf_set_ = false;
@@ -68,10 +75,8 @@ PeopleDetector::~PeopleDetector()
 
 void PeopleDetector::callback(const ImageConstPtr& image_msg, const CameraInfoConstPtr& info_msg, const LaserScanConstPtr& laserfront_msg, const LaserScanConstPtr& laserback_msg)
 {
-
 	//Get current frame time
 	Time time = laserfront_msg->header.stamp;
-
 	timer t;
 
 	//Set camera info data for kalman fiter
@@ -93,18 +98,20 @@ void PeopleDetector::callback(const ImageConstPtr& image_msg, const CameraInfoCo
     		catch (tf::TransformException ex)
 		{
         		ROS_WARN("Cannot get static transform: %s", ex.what());
+			static_tf_set_ = false;
         	}
 	}
-
-	global_tf_set_ = false;
-	try{
-		tf_listener_->lookupTransform("/odom", "/base_link", time, tf_base_global_);
-		tf_global_base_.setData(tf_base_global_.inverse());
-		global_tf_set_ = true;
-	}
-	catch(tf::TransformException ex){
-		ROS_ERROR("%s", ex.what());
-		global_tf_set_ = false;
+	if(!global_tf_set_)
+	{
+		try{
+			tf_listener_->lookupTransform("/odom", "/base_link", time, tf_base_global_);
+			tf_global_base_.setData(tf_base_global_.inverse());
+			global_tf_set_ = true;
+		}
+		catch(tf::TransformException ex){
+			ROS_WARN("Cannot get static transform: %s", ex.what());
+			global_tf_set_ = false;
+		}
 	}
 
 	vector<tf::Point> legs_front, legs_back;
@@ -122,21 +129,26 @@ void PeopleDetector::callback(const ImageConstPtr& image_msg, const CameraInfoCo
 	getLaserDetection(legs_front, legs_back, laser_ROI, laserfront_msg->header.stamp);
 	getImageDetection(image_ROI, image);
 
+	#ifdef DEBUG_PRINT_LASER_DETECTION
 	for(int i=0; i<laser_ROI.size(); i++)
 		cv::rectangle(image,laser_ROI[i], cv::Scalar(0,0,255), 2);	
+	#endif
 
+	#ifdef DEBUG_PRINT_IMAGE_DETECTION
 	for(int i=0; i<image_ROI.size(); i++)
 		cv::rectangle(image,image_ROI[i], cv::Scalar(255,0,0), 2);	
-
+	#endif
 
 	//Merge laser and image data
 	vector<mergedData> merged_data;
 
 	mergeData(merged_data, image_ROI, laser_ROI, legs_front, legs_back);
 
+	#ifdef DEBUG_PRINT_LASER_DETECTION
 	for(int i=0; i<merged_data.size(); i++)
 		cv::rectangle(image,merged_data[i].ROI, cv::Scalar(0,255,0), 1);	
-
+	#endif
+	
 	//Update people data
 	updatePeople(merged_data, time);
 
@@ -149,14 +161,21 @@ void PeopleDetector::callback(const ImageConstPtr& image_msg, const CameraInfoCo
 	}
 
 	//Publish detected people
+	#ifdef DEBUG_PUBLISH_PERSON_MARKER
 	publishPeople();
-	
-	//printPeople(image, time);
+	#endif	
+
+	#ifdef DEBUG_PRINT_DETECTED_PERSON
+	printPeople(image, time);
+	#endif
 
 	cv::imshow("Frame", image);
 	cv::waitKey(1);
+
+	#ifdef DEBUG_PRINT_PROCESSING_TIME
 	cout << "TIEMPO: " << t.elapsed() << endl;
 	cout << "------------------------------" << endl;
+	#endif
 
 	return;
 }
@@ -257,7 +276,7 @@ void PeopleDetector::updatePeople(vector<mergedData>& merged_data, ros::Time tim
 cv::Point2d PeopleDetector::point3dTo2d(tf::Point point3d)
 {
 	//Correct transform to follow camera coordinates system standard
-	//TODO: fix tf publisher and use camera info messages to get distance between stereo cameras
+	//TODO: use camera info messages to get distance between stereo cameras
 	cv::Point3d pt_cv  (-1*(point3d.y() + 0.06), -1*point3d.z(), point3d.x());	
 	cv::Point2d point_2d_rect;
 	//If the point is behind the camera
@@ -382,20 +401,24 @@ void PeopleDetector::mergeData(vector<mergedData>& v_merged_data, vector<cv::Rec
 
 void PeopleDetector::publishPeople()
 {
+
 	MarkerArray marker_array;
 	Marker marker_init;
 
-	marker_init.header.frame_id = "/base_link";
-	marker_init.ns = "people_marker";
-	marker_init.type = Marker::CUBE;
+	marker_init.header.frame_id = "/odom";
+	marker_init.ns = "person";
+	marker_init.type = Marker::CYLINDER;
 	marker_init.action = Marker::ADD;
+	marker_init.lifetime = ros::Duration(0.2);
 
-	geometry_msgs::Point p;
-	marker_init.points.push_back(p);
+	marker_init.pose.orientation.x = 0.0;
+	marker_init.pose.orientation.y = 0.0;
+	marker_init.pose.orientation.z = 0.0;
+	marker_init.pose.orientation.w = 1.0;
 	
-	marker_init.scale.x = 0.03;
-	marker_init.scale.y = 0.05;
-	marker_init.scale.z = 0.01;
+	marker_init.scale.x = 0.3;
+	marker_init.scale.y = 0.3;
+	marker_init.scale.z = 1.0;
 
 	marker_init.color.r = 0.0f;
 	marker_init.color.g = 1.0f;
@@ -407,11 +430,10 @@ void PeopleDetector::publishPeople()
 		Marker marker = marker_init;
 		marker.header.stamp = people_[i].getTime();	
 		marker.id = people_[i].getId();
-		tf::Point local_pt = globalCoordinatesToLocal( people_[i].getPos(), people_[i].getTime());
-		p.x = local_pt.x();
-		p.y = local_pt.y();
-		p.z = 0;
-		marker.points.push_back(p);
+		marker.pose.position.x = people_[i].getPos().x();
+		marker.pose.position.y = people_[i].getPos().y();
+		marker.pose.position.z = 0.0;
+
 		marker_array.markers.push_back(marker);
 	}	
 
@@ -449,10 +471,11 @@ void PeopleDetector::getLaserDetection(vector<tf::Point>& legs_front, vector<tf:
 
 		for(j = 0; j< legs_ROI_unfiltered.size(); j++)
 		{
-			if(j!=i && (r & legs_ROI_unfiltered[j]) == r)
+			cv::Rect r2 = legs_ROI_unfiltered[j];
+			if(j!=i && (r & r2).area() >= 0.5*r.area() && r.area() <= r2.area())
 				break;
 		}
-		if(j == legs_ROI_unfiltered.size())
+		if( j == legs_ROI_unfiltered.size() )
 		{
 			legs_ROI.push_back(legs_ROI_unfiltered[i]);
 			legs_front.push_back(legs_front_filtered[i]);
@@ -493,24 +516,22 @@ void PeopleDetector::getImageDetection(vector<cv::Rect>& image_ROI, cv::Mat imag
 	return;
 }
 
-/*
+
 void PeopleDetector::printPeople(cv::Mat image, ros::Time time)
 {
+	cv::Rect ROI;
+
 	for(int i=0; i<people_.size(); i++)
 	{
 		tf::Point local_pt = globalCoordinatesToLocal(people_[i].getPos(), time);
 		
-		if(local_pt.x() < 0)
-			continue;
-		cv::Point2d uv_botright = point3dTo2d(local_pt + tf::Point(0,-0.5, -0.33-0.93));
-		cv::Point2d uv_topleft = point3dTo2d(local_pt+ tf::Point(0,0.5,-0.33-0.93+1.90));
-		cv::Rect ROI(uv_topleft,uv_botright);
+		ROI = point3dToROI(local_pt, time);
 
 		char text[100];
-		sprintf(text,"ID: %d | ERROR_COV: %f | FIAB: %d", people_[i].getId(), people_[i].getErrorCov(), people_[i].getFiab());
-		cv::rectangle(image,ROI, cv::Scalar(0,255,0));	
-		cv::putText(image, text, uv_topleft, cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(0,255,0));
+		sprintf(text,"ID: %d | LIFE TIME: %d", people_[i].getId(), people_[i].getLifeTime());
+		cv::rectangle(image,ROI, cv::Scalar(0,255,0), 2);	
+		cv::putText(image, text, cv::Point(ROI.x, ROI.y), cv::FONT_HERSHEY_COMPLEX_SMALL, 0.5, cv::Scalar(0,255,0));
 	}
 	return;
 }
-*/
+

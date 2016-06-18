@@ -48,7 +48,6 @@ void LaserDetector::scan_message(vector<tf::Point>& legs_points, const sensor_ms
 
 	sensor_msgs::PointCloud cloud;
 	projector_.transformLaserScanToPointCloud("/base_link", *msg, cloud, *tf_listener_);
-//	projector_.projectLaser(*msg, cloud);
 
    	// For more information have a look at ../common/dynamictable.h/hxx
     	dyntab_segments *list_segments=NULL;
@@ -84,7 +83,6 @@ void LaserDetector::scan_message(vector<tf::Point>& legs_points, const sensor_ms
     	for (int i=0; i < list_segments->num(); i++) 
     	{
 		Segment *s = list_segments->getElement(i);
-
       		if (s->type == 1 && s->beams->getFirst()->range <= MAX_LASER_DIST_)
 		{
 			Segment *next_s = NULL;
@@ -95,12 +93,10 @@ void LaserDetector::scan_message(vector<tf::Point>& legs_points, const sensor_ms
 					break;
 			}
 			bool combined = combineSegments(s, next_s, cloud, legs_point);
-			if(!next_s || next_s->type != 1)
-				break;
-			i = (combined) ? next_s->getElement(0)->segment_id : next_s->getElement(0)->segment_id -1;
+			legs_points.push_back(legs_point);
+			if(combined)
+				i = next_s->getElement(0)->segment_id;
 		}
-
-		legs_points.push_back(legs_point);
 	}
 
     	// delete the list of segments 

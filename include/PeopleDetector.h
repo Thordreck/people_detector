@@ -58,7 +58,7 @@ class PeopleDetector
 		std::vector<Person>						people_;
 
 		const double							MIN_INTERSECT_; //Minimun area percentage of intersection to merge laser and image ROIs (from 0 to 1)
-		const double							MAX_STEP_; //Minimun area percentage of intersection to merge laser and image ROIs (from 0 to 1)
+		const double							MAX_STEP_; 	//Minimun area percentage of intersection to merge laser and image ROIs (from 0 to 1)
 
 		bool								cam_info_set_;
 		bool								static_tf_set_;

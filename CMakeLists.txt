@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   laser_geometry
   image_geometry
   tf
+  rviz_visual_tools
 )
 
 ## System dependencies are found with CMake's conventions
