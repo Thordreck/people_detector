@@ -16,9 +16,10 @@
 #define DEBUG_PRINT_PROCESSING_TIME
 #define DEBUG_PRINT_IMAGE_DETECTION
 #define DEBUG_PRINT_LASER_DETECTION
-#define DEBUG_PRINT_COMBINED_DETECTION
-#define DEBUG_PRINT_DETECTED_PERSON
+//#define DEBUG_PRINT_COMBINED_DETECTION
+//#define DEBUG_PRINT_DETECTED_PERSON
 #define DEBUG_PUBLISH_PERSON_MARKER
+#define LOG_SAVE_FRAMES
 
 using namespace ros;
 using namespace std;
@@ -144,7 +145,7 @@ void PeopleDetector::callback(const ImageConstPtr& image_msg, const CameraInfoCo
 
 	mergeData(merged_data, image_ROI, laser_ROI, legs_front, legs_back);
 
-	#ifdef DEBUG_PRINT_LASER_DETECTION
+	#ifdef DEBUG_PRINT_COMBINED_DETECTION
 	for(int i=0; i<merged_data.size(); i++)
 		cv::rectangle(image,merged_data[i].ROI, cv::Scalar(0,255,0), 1);	
 	#endif
