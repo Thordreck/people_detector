@@ -17,7 +17,7 @@
 #define DEBUG_PRINT_IMAGE_DETECTION
 #define DEBUG_PRINT_LASER_DETECTION
 //#define DEBUG_PRINT_COMBINED_DETECTION
-//#define DEBUG_PRINT_DETECTED_PERSON
+#define DEBUG_PRINT_DETECTED_PERSON
 #define DEBUG_PUBLISH_PERSON_MARKER
 #define LOG_SAVE_FRAMES
 
@@ -132,12 +132,12 @@ void PeopleDetector::callback(const ImageConstPtr& image_msg, const CameraInfoCo
 
 	#ifdef DEBUG_PRINT_LASER_DETECTION
 	for(int i=0; i<laser_ROI.size(); i++)
-		cv::rectangle(image,laser_ROI[i], cv::Scalar(0,0,255), 2);	
+		cv::rectangle(image,laser_ROI[i], cv::Scalar(0,0,255), 2.5);	
 	#endif
 
 	#ifdef DEBUG_PRINT_IMAGE_DETECTION
 	for(int i=0; i<image_ROI.size(); i++)
-		cv::rectangle(image,image_ROI[i], cv::Scalar(255,0,0), 2);	
+		cv::rectangle(image,image_ROI[i], cv::Scalar(255,0,0), 2.5);	
 	#endif
 
 	//Merge laser and image data
@@ -147,7 +147,7 @@ void PeopleDetector::callback(const ImageConstPtr& image_msg, const CameraInfoCo
 
 	#ifdef DEBUG_PRINT_COMBINED_DETECTION
 	for(int i=0; i<merged_data.size(); i++)
-		cv::rectangle(image,merged_data[i].ROI, cv::Scalar(0,255,0), 1);	
+		cv::rectangle(image,merged_data[i].ROI, cv::Scalar(0,255,255), 1.3);	
 	#endif
 	
 	//Update people data
@@ -176,6 +176,12 @@ void PeopleDetector::callback(const ImageConstPtr& image_msg, const CameraInfoCo
 	#ifdef DEBUG_PRINT_PROCESSING_TIME
 	cout << "TIEMPO: " << t.elapsed() << endl;
 	cout << "------------------------------" << endl;
+	#endif
+	
+	#ifdef LOG_SAVE_FRAMES
+	char filename[200];
+	sprintf(filename, "/home/viki/frames/frame_%d.png", image_msg->header.seq);
+	cv::imwrite(filename, image);
 	#endif
 
 	return;
@@ -490,6 +496,7 @@ void PeopleDetector::getImageDetection(vector<cv::Rect>& image_ROI, cv::Mat imag
 	//Downscale image
 	cv::Mat image_downscaled;
 	cv::resize(image, image_downscaled,cv::Size(), 0.5,0.5);
+	//cv::resize(image, image_downscaled,cv::Size(), 1,1);
 	
 	vector<cv::Rect> ROI_unfiltered;
 	imd_->detectPeople(image_downscaled,ROI_unfiltered);
